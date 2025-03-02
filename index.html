@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess the Destination</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 50px; }
+        .option-btn { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .correct { color: green; font-weight: bold; }
+        .incorrect { color: red; font-weight: bold; }
+        #game-container { display: none; }
+        #restart-btn, #challenge-btn { display: none; margin-top: 10px; padding: 10px 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h1>Guess the Destination!</h1>
+
+    <!-- Username input before starting -->
+    <div id="username-container">
+        <p>Enter your name to start the game:</p>
+        <input type="text" id="username-input" placeholder="Your Name">
+        <button onclick="startGame()">Start Game</button>
+    </div>
+
+    <!-- Game content -->
+    <div id="game-container">
+        <p id="clue">Loading clue...</p>
+        <div id="options"></div> <!-- Buttons for answer choices -->
+        <p id="feedback"></p> <!-- Correct/Incorrect response -->
+
+        <button id="next-btn" onclick="fetchQuestion()" style="display: none;">Next Question</button>
+        <button id="restart-btn" onclick="resetGame()">Play Again</button>
+        <button id="challenge-btn" onclick="challengeFriend()">Challenge a Friend</button>
+    </div>
+
+    <script>
+        let currentQuestionId = null;
+        let username = "";
+
+        function startGame() {
+            username = document.getElementById("username-input").value.trim();
+            if (!username) {
+                alert("Please enter your name to start!");
+                return;
+            }
+
+            document.getElementById("username-container").style.display = "none"; 
+            document.getElementById("game-container").style.display = "block";
+
+            fetchQuestion(); // Start the game
+        }
+
+        async function fetchQuestion() {
+            document.getElementById("feedback").innerText = "";
+            document.getElementById("options").innerHTML = "";
+            document.getElementById("next-btn").style.display = "none";
+            document.getElementById("restart-btn").style.display = "none";
+            document.getElementById("challenge-btn").style.display = "none";
+
+            try {
+                const response = await fetch("http://127.0.0.1:8000/question");
+                const data = await response.json();
+
+                currentQuestionId = data.question_id;
+                document.getElementById("clue").innerText = data.clues[0];
+
+                data.choices.forEach(choice => {
+                    const button = document.createElement("button");
+                    button.innerText = choice;
+                    button.className = "option-btn";
+                    button.onclick = () => submitAnswer(choice);
+                    document.getElementById("options").appendChild(button);
+                });
+
+            } catch (error) {
+                console.error("Error fetching question:", error);
+                document.getElementById("clue").innerText = "Failed to load question!";
+            }
+        }
+
+        async function submitAnswer(userAnswer) {
+            try {
+                const response = await fetch("http://127.0.0.1:8000/answer", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question_id: currentQuestionId, user_answer: userAnswer, username: username })
+                });
+                const data = await response.json();
+
+                const feedback = document.getElementById("feedback");
+                if (data.correct) {
+                    feedback.innerHTML = `🎉 <span class="correct">Correct!</span> <br> Fun Fact: ${data.message}`;
+                    document.getElementById("next-btn").style.display = "block"; // Show 'Next' button
+                } else {
+                    feedback.innerHTML = `😢 <span class="incorrect">Incorrect! Game Over.</span> <br> Fun Fact: ${data.message}`;
+                    document.getElementById("restart-btn").style.display = "block"; // Show 'Play Again' button
+                    document.getElementById("challenge-btn").style.display = "block"; // Show 'Challenge a Friend' button
+                }
+
+            } catch (error) {
+                console.error("Error submitting answer:", error);
+                document.getElementById("feedback").innerText = "Error checking answer!";
+            }
+        }
+
+        async function resetGame() {
+            try {
+                await fetch(`http://127.0.0.1:8000/score/${username}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: username, score: 0 })
+                });
+
+                fetchQuestion(); // Restart game
+            } catch (error) {
+                console.error("Error resetting score:", error);
+                document.getElementById("feedback").innerText = "Error resetting game!";
+            }
+        }
+
+        async function challengeFriend() {
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/challenge/${username}`);
+                const data = await response.json();
+
+                alert(`Challenge your friend! Share this link: ${data.invite_link}`);
+            } catch (error) {
+                console.error("Error fetching challenge link:", error);
+                alert("Error generating challenge link!");
+            }
+        }
+    </script>
+
+</body>
+</html>
